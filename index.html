@@ -5,7 +5,8 @@
     <title>Smart Farming System - Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
+    <style> 
+    /* style of dashboard */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #e8f5e9; text-align: center; padding: 20px; }
         h1 { color: #2e7d32; }
         .container { max-width: 900px; margin: auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
@@ -127,54 +128,56 @@
         const MQTT_CONFIG = {
             host: "vb41b58d.ala.asia-southeast1.emqxsl.com",
             port: 8084,
-            path: "/mqtt",
-            clientId: "web_client_" + Math.random().toString(16).substring(2, 8),
+            path: "/mqtt", // WebSocket path for EMQX Cloud 
+            clientId: "web_client_" + Math.random().toString(16).substring(2, 8), // will generate a random client ID for each session 
             user: "Esp32",      
             pass: "Esp32_32",   
-            topicData: "sfs/node_1/sensors/data",
-            topicSettings: "sfs/node_1/sensors/settings",
-            topicStatus: "sfs/node_1/sensors/status" // ✨ 新 Topic
+            topicData: "sfs/node_1/sensors/data", // data of hardware sensors
+            topicSettings: "sfs/node_1/sensors/settings", // to send settings from dashboard to ESP32 
+            topicStatus: "sfs/node_1/sensors/status" // status sync from ESP32 to dashboard (including current settings and manual control states)
         };
 
-        const ctx = document.getElementById('liveChart').getContext('2d');
+        const ctx = document.getElementById('liveChart').getContext('2d'); // Chart.js instance for live temperature and humidity trends
         const liveChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'Temp (°C)', data: [], borderColor: '#1565c0', backgroundColor: 'rgba(21, 101, 192, 0.1)', fill: true, tension: 0.4 },
-                    { label: 'Hum (%)', data: [], borderColor: '#2e7d32', backgroundColor: 'rgba(46, 125, 50, 0.1)', fill: true, tension: 0.4 }
+                    { label: 'Temp (°C)', data: [], borderColor: '#1565c0', backgroundColor: 'rgba(21, 101, 192, 0.1)', fill: true, tension: 0.4 }, // Temperature dataset with styling
+                    { label: 'Hum (%)', data: [], borderColor: '#2e7d32', backgroundColor: 'rgba(46, 125, 50, 0.1)', fill: true, tension: 0.4 } // Humidity dataset with styling
                 ]
             },
-            options: { responsive: true, animation: false }
+            options: { responsive: true, animation: false } // Disable animation for real-time updates
         });
 
-        const mqttClient = new Paho.MQTT.Client(MQTT_CONFIG.host, Number(MQTT_CONFIG.port), MQTT_CONFIG.path, MQTT_CONFIG.clientId);
+        const mqttClient = new Paho.MQTT.Client(MQTT_CONFIG.host, Number(MQTT_CONFIG.port), MQTT_CONFIG.path, MQTT_CONFIG.clientId); // Create MQTT client instance
 
         mqttClient.onMessageArrived = (message) => {
             try {
                 const data = JSON.parse(message.payloadString);
                 
-                // ✨ 分类处理消息
+                // Determine message type based on topic and update UI accordingly
                 if (message.destinationName === MQTT_CONFIG.topicData) {
                     updateSensorUI(data);
                 } else if (message.destinationName === MQTT_CONFIG.topicStatus) {
                     updateSystemStatus(data);
                 }
-            } catch (e) { console.error("JSON Error", e); }
+            } catch (error) { // Handle JSON parsing errors gracefully
+                console.error("JSON Error", error);
+            }
         };
 
-        mqttClient.connect({
+        mqttClient.connect({ // Connect to MQTT broker with specified options
             useSSL: true, userName: MQTT_CONFIG.user, password: MQTT_CONFIG.pass,
             onSuccess: () => {
-                console.log("✅ MQTT Connected!");
+                console.log(" MQTT Connected!");
                 mqttClient.subscribe(MQTT_CONFIG.topicData);
                 mqttClient.subscribe(MQTT_CONFIG.topicStatus);
-                document.getElementById('time').innerText = "Status: Online & Syncing";
+                document.getElementById('time').innerText = "Status: Online & Syncing"; // Update status text on successful connection
             }
         });
 
-        // 1. 处理传感器数据
+        // update the hardware sensor data on dashboard (from data topic) 
         function updateSensorUI(data) {
             if (data.temperature !== undefined) {
                 document.getElementById('temp').innerHTML = `${data.temperature.toFixed(1)}<span class="unit">°C</span>`;
@@ -183,10 +186,10 @@
                 document.getElementById('light').innerHTML = `${data.light_lux.toFixed(0)}<span class="unit">Lux</span>`;
                 document.getElementById('waterLevel').innerHTML = `${data.tank_level}<span class="unit">%</span>`;
                 
-                // 水箱警报显示
+                // logic of water empty alert display
                 document.getElementById('waterAlert').style.display = data.tank_empty_alert ? "block" : "none";
 
-                // 更新图表
+                // Update live chart with new data points, keeping only the latest 15 entries for clarity
                 const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 if (liveChart.data.labels.length > 15) {
                     liveChart.data.labels.shift();
@@ -201,27 +204,27 @@
             }
         }
 
-        // 2. 处理系统设置同步 (来自 status topic)
+        // update the system status and current settings on dashboard (from status topic)
         function updateSystemStatus(data) {
             console.log("🔄 Syncing from ESP32 status...", data);
 
-            // 同步模式开关
+             // sync mode status and description 
             const isAuto = !data.manual_mode;
             document.getElementById('modeControl').checked = isAuto;
             document.getElementById('modeDesc').innerText = isAuto ? "Automatic Mode: System Managing." : "Manual Mode: User Control.";
             
-            // 模式改变时更新控件启用状态
+            // if the status is auto, disable the manual control switches; if manual, enable them for user interaction
             document.getElementById('pumpControl').disabled = isAuto;
             document.getElementById('fanControl').disabled = isAuto;
             document.getElementById('lightControl').disabled = isAuto;
 
-            // 同步触发阈值显示
+            // sync the threshold display text with current settings from ESP32 status, showing on and space for each parameter
             document.getElementById('tempThreshold').innerText = `Trigger: ${data.temp_on}°C (±${data.temp_space})`;
             document.getElementById('humThreshold').innerText = `Trigger: ${data.hum_on}% (±${data.hum_space})`;
             document.getElementById('soilThreshold').innerText = `Trigger: ${data.moi_on}% (±${data.moi_space})`; 
             document.getElementById('lightThreshold').innerText = `Trigger: ${data.light_on} Lux (±${data.light_space})`;
 
-            // 同步输入框数值
+            // sync the input field values with current settings from ESP32 status
             document.getElementById('inputTempOn').value = data.temp_on;
             document.getElementById('inputTempSpace').value = data.temp_space;
             document.getElementById('inputHumOn').value = data.hum_on;
@@ -231,7 +234,7 @@
             document.getElementById('inputLightOn').value = data.light_on;
             document.getElementById('inputLightSpace').value = data.light_space;
 
-            // 同步继电器开关状态
+            // sync the relay switch states
             document.getElementById('pumpControl').checked = data.manual_pump;
             document.getElementById('pumpStatus').innerText = data.manual_pump ? "Pump is ON" : "Pump is OFF";
             document.getElementById('fanControl').checked = data.manual_fan;
@@ -240,7 +243,7 @@
             document.getElementById('lightStatus').innerText = data.manual_light ? "Light is ON" : "Light is OFF";
         }
 
-        // MQTT 发送指令
+        // MQTT send the command to ESP32 (from dashboard to ESP32)
         function sendMqttCommand(payload) {
             if (mqttClient.isConnected()) {
                 const message = new Paho.MQTT.Message(JSON.stringify(payload));
@@ -250,7 +253,7 @@
             }
         }
 
-        // 按钮：保存设置
+        // button to save the settings input by user and send to ESP32 via MQTT, also update the threshold display text immediately for better user experience without waiting for ESP32 status sync
         document.getElementById('saveSettingsBtn').addEventListener('click', () => {
             const payload = {
                 "manual_mode": !document.getElementById('modeControl').checked,
@@ -267,13 +270,13 @@
             alert("Settings deployed to Cloud!");
         });
 
-        // 模式开关逻辑
+        // logic of mode switch, when user toggles between automatic and manual mode, send the corresponding command to ESP32 via MQTT and update the description text immediately for better user experience without waiting for ESP32 status sync
         document.getElementById('modeControl').addEventListener('change', (e) => {
             const isAuto = e.target.checked;
             sendMqttCommand({ "manual_mode": !isAuto });
         });
 
-        // 手动开关逻辑
+        // logic of manual switch controls
         document.getElementById('pumpControl').addEventListener('change', (e) => sendMqttCommand({ "manual_pump": e.target.checked }));
         document.getElementById('fanControl').addEventListener('change', (e) => sendMqttCommand({ "manual_fan": e.target.checked }));
         document.getElementById('lightControl').addEventListener('change', (e) => sendMqttCommand({ "manual_light": e.target.checked }));
