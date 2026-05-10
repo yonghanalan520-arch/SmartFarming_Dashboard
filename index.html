@@ -135,10 +135,10 @@
     <div id="page3" class="page">
         <h2 style="text-align: center;">Configurations</h2>
         <div class="grid">
-            <div class="card setting-card"><h4>️ Temperature</h4><div class="input-group"><label>Trigger On (°C)</label><input type="number" id="inputTempOn" step="0.1"></div><div class="input-group"><label>Space</label><input type="number" id="inputTempSpace" step="0.1"></div></div>
-            <div class="card setting-card"><h4> Humidity</h4><div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputHumOn" step="0.1"></div><div class="input-group"><label>Space</label><input type="number" id="inputHumSpace" step="0.1"></div></div>
-            <div class="card setting-card"><h4> Soil Moisture</h4><div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputMoiOn" step="0.1"></div><div class="input-group"><label>Space</label><input type="number" id="inputMoiSpace" step="0.1"></div></div>
-            <div class="card setting-card"><h4> Light Lux</h4><div class="input-group"><label>Trigger On (Lx)</label><input type="number" id="inputLightOn" step="1"></div><div class="input-group"><label>Space</label><input type="number" id="inputLightSpace" step="1"></div></div>
+            <div class="card setting-card"><h4>️ Temperature</h4><div class="input-group"><label>Trigger On (°C)</label><input type="number" id="inputTempOn" step="0.1" value="30"></div><div class="input-group"><label>Space</label><input type="number" id="inputTempSpace"step="0.1" value="2"></div></div>
+            <div class="card setting-card"><h4> Humidity</h4><div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputHumOn" step="0.1" value="75"></div><div class="input-group"><label>Space</label><input type="number" id="inputHumSpace" step="0.1" value="5"></div></div>
+            <div class="card setting-card"><h4> Soil Moisture</h4><div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputMoiOn" step="0.1" value="30"></div><div class="input-group"><label>Space</label><input type="number" id="inputMoiSpace" step="0.1" value="5"></div></div>
+            <div class="card setting-card"><h4> Light Lux</h4><div class="input-group"><label>Trigger On (Lx)</label><input type="number" id="inputLightOn" step="1" value="500"></div><div class="input-group"><label>Space</label><input type="number" id="inputLightSpace" step="1" value="200"></div></div>
         </div>
         <div style="text-align: center; margin-top: 40px;"><button class="btn-deploy" onclick="deploy()"> Deploy Settings</button></div>
     </div>
@@ -149,6 +149,9 @@
     </div>
 
     <script>
+        // 关键修改：添加同步开关
+        let settingsInSync = false; 
+
         const CONFIG = {
             sbUrl: "https://dygrbyrpseknvkyshvir.supabase.co",
             sbKey: "sb_publishable_w9VXjh53E637ngwGo-3w0w_IgyC4rwA",
@@ -178,7 +181,6 @@
         mqtt.onMessageArrived = (msg) => {
             const d = JSON.parse(msg.payloadString);
             if (msg.destinationName === CONFIG.topics.data) {
-                // 实时更新卡片数字
                 document.getElementById('temp').innerText = d.temperature.toFixed(1);
                 document.getElementById('hum').innerText = d.humidity;
                 document.getElementById('soil').innerText = d.moisture;
@@ -196,21 +198,21 @@
         function syncUI(d) {
             const isAuto = !d.manual_mode;
             document.getElementById('modeControl').checked = isAuto;
-            // 模式同步隐藏逻辑
             document.getElementById('manualArea').style.display = isAuto ? "none" : "block";
             document.getElementById('modeTitle').innerText = isAuto ? "Automatic Mode" : "Manual Mode";
 
-            // 同步输入框
-            document.getElementById('inputTempOn').value = d.temp_on;
-            document.getElementById('inputTempSpace').value = d.temp_space;
-            document.getElementById('inputHumOn').value = d.hum_on;
-            document.getElementById('inputHumSpace').value = d.hum_space;
-            document.getElementById('inputMoiOn').value = d.moi_on;
-            document.getElementById('inputMoiSpace').value = d.moi_space;
-            document.getElementById('inputLightOn').value = d.light_on;
-            document.getElementById('inputLightSpace').value = d.light_space;
+            // 关键修改：只有在点击 Deploy 后，才允许反馈数据覆盖输入框
+            if (settingsInSync) {
+                document.getElementById('inputTempOn').value = d.temp_on;
+                document.getElementById('inputTempSpace').value = d.temp_space;
+                document.getElementById('inputHumOn').value = d.hum_on;
+                document.getElementById('inputHumSpace').value = d.hum_space;
+                document.getElementById('inputMoiOn').value = d.moi_on;
+                document.getElementById('inputMoiSpace').value = d.moi_space;
+                document.getElementById('inputLightOn').value = d.light_on;
+                document.getElementById('inputLightSpace').value = d.light_space;
+            }
 
-            // 同步继电器按钮
             document.getElementById('pumpControl').checked = d.manual_pump;
             document.getElementById('pumpStatus').innerText = d.manual_pump ? "ON" : "OFF";
             document.getElementById('fanControl').checked = d.manual_fan;
@@ -248,6 +250,9 @@
         }
 
         function deploy() {
+            // 关键修改：一旦部署，开启跟随逻辑
+            settingsInSync = true; 
+
             send({
                 "manual_mode": !document.getElementById('modeControl').checked,
                 "temp_on": parseFloat(document.getElementById('inputTempOn').value),
@@ -259,7 +264,7 @@
                 "light_on": parseFloat(document.getElementById('inputLightOn').value),
                 "light_space": parseFloat(document.getElementById('inputLightSpace').value)
             });
-            alert("Settings deployed!");
+            alert("Settings deployed! Dashboard is now synced with machine status.");
         }
 
         document.getElementById('modeControl').onchange = (e) => send({ "manual_mode": !e.target.checked });
