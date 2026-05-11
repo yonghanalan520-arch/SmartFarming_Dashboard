@@ -1,458 +1,458 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Farming System - Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        :root {
-            --primary: #2d6a4f; --accent: #ff9f1c; --bg: #f8f9fa;
-            --text: #1b4332; --card-bg: rgba(255, 255, 255, 0.9);
-        }
-
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; overflow-x: hidden; }
-
-        /* --- 侧边栏 --- */
-        .sidebar { 
-            height: 100%; width: 0; position: fixed; z-index: 1000; top: 0; left: 0; 
-            background: linear-gradient(180deg, #1b4332 0%, #2d6a4f 100%); 
-            overflow-x: hidden; transition: 0.4s; box-shadow: 4px 0 15px rgba(0,0,0,0.1); 
-        }
-        .sidebar-header { padding: 30px 20px; text-align: center; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .sidebar a { 
-            padding: 18px 25px; text-decoration: none; font-size: 17px; color: rgba(255,255,255,0.8); 
-            display: flex; align-items: center; gap: 15px; transition: 0.3s; border-left: 4px solid transparent;
-        }
-        .sidebar a:hover, .sidebar a.active { color: white; background: rgba(255,255,255,0.1); border-left-color: var(--accent); }
-        .sidebar .closebtn { position: absolute; top: 15px; right: 20px; font-size: 30px; color: white; cursor: pointer; }
-
-        .nav-header { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 65px; 
-            background: white; display: flex; align-items: center; padding: 0 20px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 500;
-        }
-        .menu-btn { font-size: 24px; cursor: pointer; color: var(--primary); }
-        .nav-title { margin-left: 20px; font-weight: 700; font-size: 1.2rem; color: var(--primary); }
-
-        .page { display: none; padding: 100px 20px 40px; max-width: 1100px; margin: auto; animation: slideUp 0.5s ease-out; }
-        .active-page { display: block; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; margin-top: 20px; }
-        .card { 
-            background: var(--card-bg); border-radius: 20px; padding: 30px 20px; border: 1px solid rgba(255,255,255,0.3);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.03); transition: 0.3s; text-align: center; width: 220px; 
-        }
-
-        .value-container { display: flex; align-items: baseline; justify-content: center; margin: 5px 0; }
-        .value { font-size: 3rem; font-weight: 800; color: #2d3436; }
-        .unit { font-size: 1.2rem; color: #999; margin-left: 8px; font-weight: 600; }
-
-        .setting-card { text-align: left; border-top: 5px solid var(--primary); }
-        .input-group { margin-bottom: 15px; }
-        .input-group label { font-size: 0.8rem; font-weight: 600; color: #555; display: block; margin-bottom: 5px; }
-       /* 🌟🌟🌟 重点修复：终极兼容 iOS 的输入框样式 🌟🌟🌟 */
-        input[type="number"], input[type="text"], input[type="date"], input[type="time"] { 
-            width: 100%; 
-            height: 45px !important; 
-            padding: 0 10px !important; 
-            border-radius: 10px; 
-            border: 1px solid #ddd; 
-            outline: none; 
-            font-weight: 600; 
-            box-sizing: border-box; 
-            
-            -webkit-appearance: none !important; 
-            appearance: none !important; 
-            background: #ffffff !important; 
-            background-color: #ffffff !important;
-            color: var(--text) !important; 
-            opacity: 1 !important; 
-        }
-        input[type="date"]::-webkit-datetime-edit, 
-        input[type="time"]::-webkit-datetime-edit {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            height: 100% !important;
-            padding: 0 !important;
-        }
-        .btn-deploy { background: var(--primary); color: white; border: none; padding: 15px 40px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.3s; }
-
-        /* --- 历史记录搜索栏：适配多框布局 --- */
-        .search-wrapper { max-width: 850px; margin: 0 auto 20px; display: flex; gap: 10px; position: relative; flex-wrap: wrap; justify-content: center; }
-        .search-wrapper i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text); z-index: 10; }
-        .search-wrapper input { flex: 1; min-width: 140px; padding: 12px 12px 12px 45px; }
-        .search-wrapper input[type="time"] { padding-left: 12px; }
-        .search-btn { background: var(--primary); color: white; border: none; padding: 0 25px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; }
-        .search-btn:hover { background: #1b4332; }
-
-        .switch { position: relative; display: inline-block; width: 55px; height: 30px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #dee2e6; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--primary); }
-        #modeControl:checked + .slider { background-color: var(--accent); }
-        input:checked + .slider:before { transform: translateX(25px); }
-
-        .log-item { background: white; border-radius: 15px; padding: 18px; margin-bottom: 15px; cursor: pointer; border-left: 5px solid var(--primary); }
-       /* 修改原有的 log-details */
-     .log-details { 
-    display: none; 
-    margin-top: 15px; 
-    padding: 15px; 
-    background: #fcfcfc; 
-    border-radius: 12px; 
-    border: 1px solid #f0f0f0;
-    grid-template-columns: repeat(2, 1fr); /* 两列网格 */
-    gap: 12px; 
-        }
-
-       @media screen and (max-width: 600px) {
-            .page { padding: 90px 15px 30px; }
-            
-            /* 手机端使用 Grid 网格布局 */
-            .search-wrapper { 
-                display: grid; 
-                grid-template-columns: 1fr auto 1fr; /* 分配列宽：输入框 - 文本 - 输入框 */
-                gap: 12px; 
-                align-items: center; /* 👈 写在这里一次就够了，保证左右输入框和中间对齐 */
-            }
-            
-            /* 🎯 专门精准控制这个 "to" 字 */
-           /* 🌟🌟🌟 重点修复："to" 的比例和对齐 🌟🌟🌟 */
-            .search-wrapper span {
-                display: flex;
-                align-items: center;     
-                justify-content: center; 
-                height: 45px;            /* 强制和旁边的框一样高，彻底解决对齐问题 */
-                font-size: 1.1rem;       /* 稍微放大字号，比例更好看 */
-                padding: 0 4px;        
-            }
-            
-            /* 隐藏错位的放大镜图标 */
-            .search-wrapper i { display: none; }
-            
-            /* 第1行：日期框占满整行 */
-            #logSearchInput { 
-                grid-column: 1 / -1; 
-                padding-left: 12px; /* 取消图标留出的空白 */
-            }
-            
-            /* 第2行：时间框并排显示 (自动按照 1fr auto 1fr 排列) */
-            #fromTimeInput { padding-left: 12px; }
-            #toTimeInput { padding-left: 12px; }
-            
-           /* 确保按钮高度也一致 */
-            .search-btn { 
-                grid-column: 1 / -1; 
-                padding: 0;          /* 取消上下 padding，用 height 控制 */
-                margin-top: 5px;
-                font-size: 1rem;
-                height: 45px;        /* 加这句！ */
-            }
-        }
-
-        /* 新增的内部数据框样式 */
-      .detail-box {
-    display: flex;
-    flex-direction: column;
-    background: white;
-    padding: 12px 10px;
-    border-radius: 8px;
-    text-align: center;
-    border: 1px solid #e9ecef;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.01);
-        }
-
-        .detail-label {
-    font-size: 0.7rem;
-    color: #6c757d;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-    font-weight: 600;
-      }
-
-      .detail-value {
-    font-size: 1.1rem;
-    color: var(--text);
-    font-weight: 700;
-      }
-      
-      </style>
-</head>
-<body>
-
-    <div id="mySidebar" class="sidebar">
-        <div class="sidebar-header"><i class="fas fa-leaf fa-2x"></i><h3>Smart Farming System</h3></div>
-        <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
-        <a href="#" class="nav-link active" onclick="showPage('page1', this)"><i class="fas fa-chart-line"></i> Dashboard</a>
-        <a href="#" class="nav-link" onclick="showPage('page2', this)"><i class="fas fa-sliders-h"></i> Mode Control</a>
-        <a href="#" class="nav-link" onclick="showPage('page3', this)"><i class="fas fa-bullseye"></i> Thresholds</a>
-        <a href="#" class="nav-link" onclick="showPage('page4', this)"><i class="fas fa-history"></i> History Data</a>
-    </div>
-
-    <div class="nav-header">
-        <div class="menu-btn" onclick="openNav()"><i class="fas fa-bars"></i></div>
-        <div class="nav-title">Smart Farming Control Center</div>
-    </div>
-
-    <div id="page1" class="page active-page">
-        <div class="grid">
-            <div class="card"><i class="fas fa-temperature-high"></i><h3>Temperature</h3><div class="value-container"><span id="temp" class="value">--</span><span class="unit">°C</span></div></div>
-            <div class="card"><i class="fas fa-tint"></i><h3>Humidity</h3><div class="value-container"><span id="hum" class="value">--</span><span class="unit">%</span></div></div>
-            <div class="card"><i class="fas fa-seedling"></i><h3>Soil Moisture</h3><div class="value-container"><span id="soil" class="value">--</span><span class="unit">%</span></div></div>
-            <div class="card"><i class="fas fa-sun"></i><h3>Light Lux</h3><div class="value-container"><span id="light" class="value">--</span><span class="unit">Lx</span></div></div>
-            <div class="card"><i class="fas fa-water"></i><h3>Water Level</h3><div class="value-container"><span id="waterLevel" class="value">--</span><span class="unit">%</span></div>
-                <div id="waterAlert" style="display:none; color:red; font-weight:bold; font-size:0.7rem; margin-top:10px;">⚠️ LOW WATER</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="page2" class="page">
-        <div class="card" style="max-width: 400px; margin: 0 auto 50px; border-top: 6px solid var(--accent);">
-            <h3 id="modeTitle">Automatic Mode</h3>
-            <label class="switch"><input type="checkbox" id="modeControl" checked><span class="slider"></span></label>
-            <p id="modeDesc">Smart monitoring active</p>
-        </div>
-        <div id="manualArea" style="display: none;">
-            <h2 style="text-align: center;">Manual Overrides</h2>
-            <div class="grid">
-                <div class="card"><h3>Water Pump</h3><label class="switch"><input type="checkbox" id="pumpControl"><span class="slider"></span></label><p id="pumpStatus">OFF</p></div>
-                <div class="card"><h3>DC Fan</h3><label class="switch"><input type="checkbox" id="fanControl"><span class="slider"></span></label><p id="fanStatus">OFF</p></div>
-                <div class="card"><h3>Grow Light</h3><label class="switch"><input type="checkbox" id="lightControl"><span class="slider"></span></label><p id="lightStatus">OFF</p></div>
-            </div>
-        </div>
-    </div>
-
-    <div id="page3" class="page">
-        <h2 style="text-align: center;">Configurations</h2>
-        <div class="grid">
-            <div class="card setting-card">
-                <h4><i class="fas fa-temperature-high"></i> Temperature</h4>
-                <div class="input-group"><label>Trigger On (°C)</label><input type="number" id="inputTempOn" step="0.1" value="30"></div>
-                <div class="input-group"><label>Space</label><input type="number" id="inputTempSpace" step="0.1" value="2"></div>
-            </div>
-            <div class="card setting-card">
-                <h4><i class="fas fa-tint"></i> Humidity</h4>
-                <div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputHumOn" step="0.1" value="75"></div>
-                <div class="input-group"><label>Space</label><input type="number" id="inputHumSpace" step="0.1" value="5"></div>
-            </div>
-            <div class="card setting-card">
-                <h4><i class="fas fa-seedling"></i> Soil Moisture</h4>
-                <div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputMoiOn" step="0.1" value="30"></div>
-                <div class="input-group"><label>Space</label><input type="number" id="inputMoiSpace" step="0.1" value="5"></div>
-            </div>
-            <div class="card setting-card">
-                <h4><i class="fas fa-sun"></i> Light Lux</h4>
-                <div class="input-group"><label>Trigger On (Lx)</label><input type="number" id="inputLightOn" step="1" value="500"></div>
-                <div class="input-group"><label>Space</label><input type="number" id="inputLightSpace" step="1" value="200"></div>
-            </div>
-        </div>
-        <div style="text-align: center; margin-top: 40px;"><button class="btn-deploy" onclick="deploy()"> Deploy Settings</button></div>
-    </div>
-
-    <div id="page4" class="page">
-        <h2 style="text-align: center;">History Records</h2>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Smart Farming System - Dashboard</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script> 
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         
-        <div class="search-wrapper">
-            <i class="fas fa-search"></i>
-            <input type="date" id="logSearchInput">
-            <input type="time" id="fromTimeInput" title="From Time">
-            <span style="align-self: center; font-weight: bold; color: var(--text);">to</span>
-            <input type="time" id="toTimeInput" title="To Time">
-            <button class="search-btn" onclick="filterLogs()">Search</button>
-        </div>
-
-        <div id="logContainer" style="max-width: 600px; margin: auto;">
-            <p style="text-align: center;">Fetching Cloud Data...</p>
-        </div>
-    </div>
-
-    <script>
-        let settingsInSync = false; 
-
-        const CONFIG = {
-            sbUrl: "https://dygrbyrpseknvkyshvir.supabase.co",
-            sbKey: "sb_publishable_w9VXjh53E637ngwGo-3w0w_IgyC4rwA",
-            mqttHost: "vb41b58d.ala.asia-southeast1.emqxsl.com",
-            user: "Esp32", pass: "Esp32_32",
-            topics: { data: "sfs/node_1/sensors/data", set: "sfs/node_1/sensors/settings", status: "sfs/node_1/sensors/status" }
-        };
-
-        const sb = window.supabase.createClient(CONFIG.sbUrl, CONFIG.sbKey);
-        const mqtt = new Paho.MQTT.Client(CONFIG.mqttHost, 8084, "/mqtt", "web_" + Math.random().toString(16).slice(2,8));
-
-        function openNav() { document.getElementById("mySidebar").style.width = window.innerWidth < 600 ? "80%" : "280px"; }
-        function closeNav() { document.getElementById("mySidebar").style.width = "0"; }
-        
-        function showPage(id, link) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-            document.getElementById(id).classList.add('active-page');
-            if(link) link.classList.add('active');
-            closeNav();
-            if(id === 'page4') loadLogs();
-        }
-
-        mqtt.onMessageArrived = (msg) => {
-            const d = JSON.parse(msg.payloadString);
-            if (msg.destinationName === CONFIG.topics.data) {
-                document.getElementById('temp').innerText = d.temperature.toFixed(1);
-                document.getElementById('hum').innerText = d.humidity;
-                document.getElementById('soil').innerText = d.moisture;
-                document.getElementById('light').innerText = d.light_lux.toFixed(0);
-                document.getElementById('waterLevel').innerText = d.tank_level;
-                document.getElementById('waterAlert').style.display = d.tank_empty_alert ? "block" : "none";
-            }
-            if (msg.destinationName === CONFIG.topics.status) syncUI(d);
-        };
-
-        mqtt.connect({ useSSL: true, userName: CONFIG.user, password: CONFIG.pass, onSuccess: () => {
-            mqtt.subscribe(CONFIG.topics.data); mqtt.subscribe(CONFIG.topics.status);
-        }});
-
-        function syncUI(d) {
-            const isAuto = !d.manual_mode;
-            document.getElementById('modeControl').checked = isAuto;
-            document.getElementById('manualArea').style.display = isAuto ? "none" : "block";
-            document.getElementById('modeTitle').innerText = isAuto ? "Automatic Mode" : "Manual Mode";
-
-            if (settingsInSync) {
-                document.getElementById('inputTempOn').value = d.temp_on;
-                document.getElementById('inputTempSpace').value = d.temp_space;
-                document.getElementById('inputHumOn').value = d.hum_on;
-                document.getElementById('inputHumSpace').value = d.hum_space;
-                document.getElementById('inputMoiOn').value = d.moi_on;
-                document.getElementById('inputMoiSpace').value = d.moi_space;
-                document.getElementById('inputLightOn').value = d.light_on;
-                document.getElementById('inputLightSpace').value = d.light_space;
+        <style>
+            :root {
+                --primary: #2d6a4f; --accent: #ff9f1c; --bg: #f8f9fa;
+                --text: #1b4332; --card-bg: rgba(255, 255, 255, 0.9);
             }
 
-            document.getElementById('pumpControl').checked = d.manual_pump;
-            document.getElementById('pumpStatus').innerText = d.manual_pump ? "ON" : "OFF";
-            document.getElementById('fanControl').checked = d.manual_fan;
-            document.getElementById('fanStatus').innerText = d.manual_fan ? "ON" : "OFF";
-            document.getElementById('lightControl').checked = d.manual_light;
-            document.getElementById('lightStatus').innerText = d.manual_light ? "ON" : "OFF";
-        }
+            body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; overflow-x: hidden; }
 
-       async function loadLogs(searchDate = "", fromTime = "", toTime = "") {
-    const list = document.getElementById('logContainer');
-    list.innerHTML = `<p style="text-align: center;">Executing SQL Query...</p>`;
-    
-    let query = sb.from('sensor_logs').select('*').order('created_at', { ascending: false });
-
-    if (searchDate) {
-        let start, end;
-        if (fromTime && toTime) {
-            // 【修复重点】: 使用 JS Date 对象读取本地时间，然后用 toISOString() 转成 UTC 标准时间 (带Z) 发给 Supabase
-            start = new Date(`${searchDate}T${fromTime}:00`).toISOString();
-            end = new Date(`${searchDate}T${toTime}:59`).toISOString();
-        } else {
-            // 全天搜索也需要转换
-            start = new Date(`${searchDate}T00:00:00`).toISOString();
-            end = new Date(`${searchDate}T23:59:59`).toISOString();
-        }
-        query = query.gte('created_at', start).lte('created_at', end);
-    }
-
-    const { data, error } = await query;
-    if(error) {
-        list.innerHTML = `<p style="text-align: center; color: red;">Error: ${error.message}</p>`;
-        return;
-    }
-    renderLogs(data);
-}
-
-        function renderLogs(logs) {
-            const list = document.getElementById('logContainer');
-            list.innerHTML = "";
-            if (logs.length === 0) {
-                list.innerHTML = `<p style="text-align: center;">No records found for this range.</p>`;
-                return;
+            /*Design of Side Bar*/
+            .sidebar { 
+                height: 100%; width: 0; position: fixed; z-index: 1000; top: 0; left: 0; 
+                background: linear-gradient(180deg, #1b4332 0%, #2d6a4f 100%); 
+                overflow-x: hidden; transition: 0.4s; box-shadow: 4px 0 15px rgba(0,0,0,0.1); 
             }
-            logs.forEach(log => {
-                const item = document.createElement('div');
-                item.className = "log-item";
-                const d = new Date(log.created_at);
-                const formattedTime = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}, ${d.toLocaleTimeString()}`;
+            .sidebar-header { padding: 30px 20px; text-align: center; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); }
+            .sidebar a { 
+                padding: 18px 25px; text-decoration: none; font-size: 17px; color: rgba(255,255,255,0.8); 
+                display: flex; align-items: center; gap: 15px; transition: 0.3s; border-left: 4px solid transparent;
+            }
+            .sidebar a:hover, .sidebar a.active { color: white; background: rgba(255,255,255,0.1); border-left-color: var(--accent); }
+            .sidebar .closebtn { position: absolute; top: 15px; right: 20px; font-size: 30px; color: white; cursor: pointer; }
 
-                item.innerHTML = `
-                    <div style="display:flex; justify-content:space-between;">
-                        <strong> ${formattedTime}</strong>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                    <div class="log-details" id="lg-${log.id}">
-                        <div class="detail-box">
-                            <span class="detail-label">Temperature</span>
-                            <span class="detail-value">${log.temperature}°C</span>
-                        </div>
-                        <div class="detail-box">
-                            <span class="detail-label">Humidity</span>
-                            <span class="detail-value">${log.humidity}%</span>
-                        </div>
-                        <div class="detail-box">
-                            <span class="detail-label">Soil Moisture</span>
-                            <span class="detail-value">${log.soil_moisture}%</span>
-                        </div>
-                        <div class="detail-box">
-                            <span class="detail-label">Light Lux</span>
-                            <span class="detail-value">${log.light_lux}</span>
-                        </div>
-                        <div class="detail-box">
-                            <span class="detail-label">Water Level</span>
-                            <span class="detail-value">${log.water_level}%</span>
-                        </div>
-                    </div>`;
+            .nav-header { 
+                position: fixed; top: 0; left: 0; width: 100%; height: 65px; 
+                background: white; display: flex; align-items: center; padding: 0 20px; 
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 500;
+            }
+            .menu-btn { font-size: 24px; cursor: pointer; color: var(--primary); }
+            .nav-title { margin-left: 20px; font-weight: 700; font-size: 1.2rem; color: var(--primary); }
+
+            .page { display: none; padding: 100px 20px 40px; max-width: 1100px; margin: auto; animation: slideUp 0.5s ease-out; }
+            .active-page { display: block; }
+            @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+            .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; margin-top: 20px; }
+            .card { 
+                background: var(--card-bg); border-radius: 20px; padding: 30px 20px; border: 1px solid rgba(255,255,255,0.3);
+                box-shadow: 0 10px 20px rgba(0,0,0,0.03); transition: 0.3s; text-align: center; width: 220px; 
+            }
+
+            .value-container { display: flex; align-items: baseline; justify-content: center; margin: 5px 0; }
+            .value { font-size: 3rem; font-weight: 800; color: #2d3436; }
+            .unit { font-size: 1.2rem; color: #999; margin-left: 8px; font-weight: 600; }
+
+            .setting-card { text-align: left; border-top: 5px solid var(--primary); }
+            .input-group { margin-bottom: 15px; }
+            .input-group label { font-size: 0.8rem; font-weight: 600; color: #555; display: block; margin-bottom: 5px; }
+
+        /* To control the view in IOS */
+            input[type="number"], input[type="text"], input[type="date"], input[type="time"] { 
+                width: 100%; 
+                height: 45px !important; 
+                padding: 0 10px !important; 
+                border-radius: 10px; 
+                border: 1px solid #ddd; 
+                outline: none; 
+                font-weight: 600; 
+                box-sizing: border-box; 
                 
-                item.onclick = () => {
-                    const el = document.getElementById(`lg-${log.id}`);
-                    el.style.display = (el.style.display === "grid") ? "none" : "grid";
-                };
-                list.appendChild(item);
-            });
+                -webkit-appearance: none !important; 
+                appearance: none !important; 
+                background: #ffffff !important; 
+                background-color: #ffffff !important;
+                color: var(--text) !important; 
+                opacity: 1 !important; 
+            }
+            input[type="date"]::-webkit-datetime-edit, 
+            input[type="time"]::-webkit-datetime-edit {
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                height: 100% !important;
+                padding: 0 !important;
+            }
+            .btn-deploy { background: var(--primary); color: white; border: none; padding: 15px 40px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.3s; }
+
+            /* Desiign of Page 4- View History Data */
+            .search-wrapper { max-width: 850px; margin: 0 auto 20px; display: flex; gap: 10px; position: relative; flex-wrap: wrap; justify-content: center; }
+            .search-wrapper i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text); z-index: 10; }
+            .search-wrapper input { flex: 1; min-width: 140px; padding: 12px 12px 12px 45px; }
+            .search-wrapper input[type="time"] { padding-left: 12px; }
+            .search-btn { background: var(--primary); color: white; border: none; padding: 0 25px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; }
+            .search-btn:hover { background: #1b4332; }
+
+            .switch { position: relative; display: inline-block; width: 55px; height: 30px; }
+            .switch input { opacity: 0; width: 0; height: 0; }
+            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #dee2e6; transition: .4s; border-radius: 34px; }
+            .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+            input:checked + .slider { background-color: var(--primary); }
+            #modeControl:checked + .slider { background-color: var(--accent); }
+            input:checked + .slider:before { transform: translateX(25px); }
+
+            .log-item { background: white; border-radius: 15px; padding: 18px; margin-bottom: 15px; cursor: pointer; border-left: 5px solid var(--primary); }
+        
+            .log-details { 
+            display: none; 
+            margin-top: 15px; 
+            padding: 15px; 
+            background: #fcfcfc; 
+            border-radius: 12px; 
+            border: 1px solid #f0f0f0;
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 12px; 
+            }
+
+        @media screen and (max-width: 600px) {
+                .page { padding: 90px 15px 30px; }
+                
+                /* View in phone need to use GRID*/
+                .search-wrapper { 
+                    display: grid; 
+                    grid-template-columns: 1fr auto 1fr; 
+                    gap: 12px; 
+                    align-items: center; 
+                }
+                
+            /* The design of View "To"*/
+                .search-wrapper span {
+                    display: flex;
+                    align-items: center;     
+                    justify-content: center; 
+                    height: 45px;            /* To force the word TO same height with input fields */
+                    font-size: 1.1rem;   
+                    padding: 0 4px;        
+                }
+                
+                /*To hide the icon of magnifier*/
+                .search-wrapper i { display: none; }
+                
+                /* Make the date input box occupy the entire row */
+                #logSearchInput { 
+                    grid-column: 1 / -1; 
+                    padding-left: 12px; /* resets the text indentation, as the   magnifying glass search icon is hidden in the mobile view. */
+                }
+                
+                /* These elements automatically flow into the second row.
+              They align perfectly side-by-side based on the parent */
+                #fromTimeInput { padding-left: 12px; }
+                #toTimeInput { padding-left: 12px; }
+                
+            /* Make sure the button is same height */
+                .search-btn { 
+                    grid-column: 1 / -1; 
+                    padding: 0;         
+                    margin-top: 5px;
+                    font-size: 1rem;
+                    height: 45px;    
+                }
+            }
+
+            /* Design of the detail box */
+        .detail-box {
+        display: flex;
+        flex-direction: column;
+        background: white;
+        padding: 12px 10px;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.01);
+            }
+
+            .detail-label {
+        font-size: 0.7rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+        font-weight: 600;
         }
 
-        function filterLogs() {
-            const dateVal = document.getElementById('logSearchInput').value;
-            const fromVal = document.getElementById('fromTimeInput').value;
-            const toVal = document.getElementById('toTimeInput').value;
-            loadLogs(dateVal, fromVal, toVal);
+        .detail-value {
+        font-size: 1.1rem;
+        color: var(--text);
+        font-weight: 700;
+        }
+        
+        </style>
+    </head>
+    <body>
+
+        <div id="mySidebar" class="sidebar">
+            <div class="sidebar-header"><i class="fas fa-leaf fa-2x"></i><h3>Smart Farming System</h3></div>
+            <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+            <a href="#" class="nav-link active" onclick="showPage('page1', this)"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="#" class="nav-link" onclick="showPage('page2', this)"><i class="fas fa-sliders-h"></i> Mode Control</a>
+            <a href="#" class="nav-link" onclick="showPage('page3', this)"><i class="fas fa-bullseye"></i> Thresholds</a>
+            <a href="#" class="nav-link" onclick="showPage('page4', this)"><i class="fas fa-history"></i> History Data</a>
+        </div>
+
+        <div class="nav-header">
+            <div class="menu-btn" onclick="openNav()"><i class="fas fa-bars"></i></div>
+            <div class="nav-title">Smart Farming Control Center</div>
+        </div>
+
+        <div id="page1" class="page active-page">
+            <div class="grid">
+                <div class="card"><i class="fas fa-temperature-high"></i><h3>Temperature</h3><div class="value-container"><span id="temp" class="value">--</span><span class="unit">°C</span></div></div>
+                <div class="card"><i class="fas fa-tint"></i><h3>Humidity</h3><div class="value-container"><span id="hum" class="value">--</span><span class="unit">%</span></div></div>
+                <div class="card"><i class="fas fa-seedling"></i><h3>Soil Moisture</h3><div class="value-container"><span id="soil" class="value">--</span><span class="unit">%</span></div></div>
+                <div class="card"><i class="fas fa-sun"></i><h3>Light Lux</h3><div class="value-container"><span id="light" class="value">--</span><span class="unit">Lx</span></div></div>
+                <div class="card"><i class="fas fa-water"></i><h3>Water Level</h3><div class="value-container"><span id="waterLevel" class="value">--</span><span class="unit">%</span></div>
+                    <div id="waterAlert" style="display:none; color:red; font-weight:bold; font-size:0.7rem; margin-top:10px;">⚠️ LOW WATER</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page2" class="page">
+            <div class="card" style="max-width: 400px; margin: 0 auto 50px; border-top: 6px solid var(--accent);">
+                <h3 id="modeTitle">Automatic Mode</h3>
+                <label class="switch"><input type="checkbox" id="modeControl" checked><span class="slider"></span></label>
+                <p id="modeDesc">Smart monitoring active</p>
+            </div>
+            <div id="manualArea" style="display: none;">
+                <h2 style="text-align: center;">Manual Overrides</h2>
+                <div class="grid">
+                    <div class="card"><h3>Water Pump</h3><label class="switch"><input type="checkbox" id="pumpControl"><span class="slider"></span></label><p id="pumpStatus">OFF</p></div>
+                    <div class="card"><h3>DC Fan</h3><label class="switch"><input type="checkbox" id="fanControl"><span class="slider"></span></label><p id="fanStatus">OFF</p></div>
+                    <div class="card"><h3>Grow Light</h3><label class="switch"><input type="checkbox" id="lightControl"><span class="slider"></span></label><p id="lightStatus">OFF</p></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page3" class="page">
+            <h2 style="text-align: center;">Configurations</h2>
+            <div class="grid">
+                <div class="card setting-card">
+                    <h4><i class="fas fa-temperature-high"></i> Temperature</h4>
+                    <div class="input-group"><label>Trigger On (°C)</label><input type="number" id="inputTempOn" step="0.1" value="30"></div>
+                    <div class="input-group"><label>Space</label><input type="number" id="inputTempSpace" step="0.1" value="2"></div>
+                </div>
+                <div class="card setting-card">
+                    <h4><i class="fas fa-tint"></i> Humidity</h4>
+                    <div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputHumOn" step="0.1" value="75"></div>
+                    <div class="input-group"><label>Space</label><input type="number" id="inputHumSpace" step="0.1" value="5"></div>
+                </div>
+                <div class="card setting-card">
+                    <h4><i class="fas fa-seedling"></i> Soil Moisture</h4>
+                    <div class="input-group"><label>Trigger On (%)</label><input type="number" id="inputMoiOn" step="0.1" value="30"></div>
+                    <div class="input-group"><label>Space</label><input type="number" id="inputMoiSpace" step="0.1" value="5"></div>
+                </div>
+                <div class="card setting-card">
+                    <h4><i class="fas fa-sun"></i> Light Lux</h4>
+                    <div class="input-group"><label>Trigger On (Lx)</label><input type="number" id="inputLightOn" step="1" value="500"></div>
+                    <div class="input-group"><label>Space</label><input type="number" id="inputLightSpace" step="1" value="200"></div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 40px;"><button class="btn-deploy" onclick="deploy()"> Deploy Settings</button></div>
+        </div>
+
+        <div id="page4" class="page">
+            <h2 style="text-align: center;">History Records</h2>
+            
+            <div class="search-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="date" id="logSearchInput">
+                <input type="time" id="fromTimeInput" title="From Time">
+                <span style="align-self: center; font-weight: bold; color: var(--text);">to</span>
+                <input type="time" id="toTimeInput" title="To Time">
+                <button class="search-btn" onclick="filterLogs()">Search</button>
+            </div>
+
+            <div id="logContainer" style="max-width: 600px; margin: auto;">
+                <p style="text-align: center;">Fetching Cloud Data...</p>
+            </div>
+        </div>
+
+        <script>
+            let settingsInSync = false; 
+
+            const CONFIG = {
+                sbUrl: "https://dygrbyrpseknvkyshvir.supabase.co", // url of Supabase
+                sbKey: "sb_publishable_w9VXjh53E637ngwGo-3w0w_IgyC4rwA", // Publish key of Supabase
+                mqttHost: "vb41b58d.ala.asia-southeast1.emqxsl.com", // link of the EMQT MQTT BROKER
+                user: "Esp32", pass: "Esp32_32",
+                topics: { data: "sfs/node_1/sensors/data", set: "sfs/node_1/sensors/settings", status: "sfs/node_1/sensors/status" }
+            };
+
+            const sb = window.supabase.createClient(CONFIG.sbUrl, CONFIG.sbKey); 
+            const mqtt = new Paho.MQTT.Client(CONFIG.mqttHost, 8084, "/mqtt", "web_" + Math.random().toString(16).slice(2,8));
+
+            function openNav() { document.getElementById("mySidebar").style.width = window.innerWidth < 600 ? "80%" : "280px"; }
+            function closeNav() { document.getElementById("mySidebar").style.width = "0"; }
+            
+            function showPage(id, link) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                document.getElementById(id).classList.add('active-page');
+                if(link) link.classList.add('active');
+                closeNav();
+                if(id === 'page4') loadLogs();
+            }
+
+            mqtt.onMessageArrived = (msg) => {
+                const d = JSON.parse(msg.payloadString);
+                if (msg.destinationName === CONFIG.topics.data) {
+                    document.getElementById('temp').innerText = d.temperature.toFixed(1);
+                    document.getElementById('hum').innerText = d.humidity;
+                    document.getElementById('soil').innerText = d.moisture;
+                    document.getElementById('light').innerText = d.light_lux.toFixed(0);
+                    document.getElementById('waterLevel').innerText = d.tank_level;
+                    document.getElementById('waterAlert').style.display = d.tank_empty_alert ? "block" : "none";
+                }
+                if (msg.destinationName === CONFIG.topics.status) syncUI(d);
+            };
+
+            mqtt.connect({ useSSL: true, userName: CONFIG.user, password: CONFIG.pass, onSuccess: () => {
+                mqtt.subscribe(CONFIG.topics.data); mqtt.subscribe(CONFIG.topics.status);
+            }});
+
+            function syncUI(d) {
+                const isAuto = !d.manual_mode;
+                document.getElementById('modeControl').checked = isAuto;
+                document.getElementById('manualArea').style.display = isAuto ? "none" : "block";
+                document.getElementById('modeTitle').innerText = isAuto ? "Automatic Mode" : "Manual Mode";
+
+                if (settingsInSync) {
+                    document.getElementById('inputTempOn').value = d.temp_on;
+                    document.getElementById('inputTempSpace').value = d.temp_space;
+                    document.getElementById('inputHumOn').value = d.hum_on;
+                    document.getElementById('inputHumSpace').value = d.hum_space;
+                    document.getElementById('inputMoiOn').value = d.moi_on;
+                    document.getElementById('inputMoiSpace').value = d.moi_space;
+                    document.getElementById('inputLightOn').value = d.light_on;
+                    document.getElementById('inputLightSpace').value = d.light_space;
+                }
+
+                document.getElementById('pumpControl').checked = d.manual_pump;
+                document.getElementById('pumpStatus').innerText = d.manual_pump ? "ON" : "OFF";
+                document.getElementById('fanControl').checked = d.manual_fan;
+                document.getElementById('fanStatus').innerText = d.manual_fan ? "ON" : "OFF";
+                document.getElementById('lightControl').checked = d.manual_light;
+                document.getElementById('lightStatus').innerText = d.manual_light ? "ON" : "OFF";
+            }
+
+        async function loadLogs(searchDate = "", fromTime = "", toTime = "") {
+        const list = document.getElementById('logContainer');
+        list.innerHTML = `<p style="text-align: center;">Executing SQL Query...</p>`;
+        
+        let query = sb.from('sensor_logs').select('*').order('created_at', { ascending: false });
+
+        if (searchDate) {
+            let start, end;
+            if (fromTime && toTime) {
+                // Use the JavaScript Date object to read the local time, and then use .toISOString() to convert it into standard UTC time (ending with 'Z') before sending it to Supabase.
+                start = new Date(`${searchDate}T${fromTime}:00`).toISOString();
+                end = new Date(`${searchDate}T${toTime}:59`).toISOString();
+            } else {
+                // Search for whole day also need transfer to ISO format to avoid timezone issue
+                start = new Date(`${searchDate}T00:00:00`).toISOString();
+                end = new Date(`${searchDate}T23:59:59`).toISOString();
+            }
+            query = query.gte('created_at', start).lte('created_at', end);
         }
 
-        function send(payload) {
-            const msg = new Paho.MQTT.Message(JSON.stringify(payload));
-            msg.destinationName = CONFIG.topics.set;
-            mqtt.send(msg);
+        const { data, error } = await query;
+        if(error) {
+            list.innerHTML = `<p style="text-align: center; color: red;">Error: ${error.message}</p>`;
+            return;
         }
+        renderLogs(data);
+    }
 
-        function deploy() {
-            settingsInSync = true; 
-            send({
-                "manual_mode": !document.getElementById('modeControl').checked,
-                "temp_on": parseFloat(document.getElementById('inputTempOn').value),
-                "temp_space": parseFloat(document.getElementById('inputTempSpace').value),
-                "hum_on": parseFloat(document.getElementById('inputHumOn').value),
-                "hum_space": parseFloat(document.getElementById('inputHumSpace').value),
-                "moi_on": parseFloat(document.getElementById('inputMoiOn').value), 
-                "moi_space": parseFloat(document.getElementById('inputMoiSpace').value),
-                "light_on": parseFloat(document.getElementById('inputLightOn').value),
-                "light_space": parseFloat(document.getElementById('inputLightSpace').value)
-            });
-            alert("Settings deployed!");
-        }
+            function renderLogs(logs) {
+                const list = document.getElementById('logContainer');
+                list.innerHTML = "";
+                if (logs.length === 0) {
+                    list.innerHTML = `<p style="text-align: center;">No records found for this range.</p>`;
+                    return;
+                }
+                logs.forEach(log => {
+                    const item = document.createElement('div');
+                    item.className = "log-item";
+                    const d = new Date(log.created_at);
+                    const formattedTime = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}, ${d.toLocaleTimeString()}`;
 
-        document.getElementById('modeControl').onchange = (e) => send({ "manual_mode": !e.target.checked });
-        document.getElementById('pumpControl').onchange = (e) => send({ "manual_pump": e.target.checked });
-        document.getElementById('fanControl').onchange = (e) => send({ "manual_fan": e.target.checked });
-        document.getElementById('lightControl').onchange = (e) => send({ "manual_light": e.target.checked });
-    </script>
-</body>
-</html>
+                    item.innerHTML = `
+                        <div style="display:flex; justify-content:space-between;">
+                            <strong> ${formattedTime}</strong>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="log-details" id="lg-${log.id}">
+                            <div class="detail-box">
+                                <span class="detail-label">Temperature</span>
+                                <span class="detail-value">${log.temperature}°C</span>
+                            </div>
+                            <div class="detail-box">
+                                <span class="detail-label">Humidity</span>
+                                <span class="detail-value">${log.humidity}%</span>
+                            </div>
+                            <div class="detail-box">
+                                <span class="detail-label">Soil Moisture</span>
+                                <span class="detail-value">${log.soil_moisture}%</span>
+                            </div>
+                            <div class="detail-box">
+                                <span class="detail-label">Light Lux</span>
+                                <span class="detail-value">${log.light_lux}</span>
+                            </div>
+                            <div class="detail-box">
+                                <span class="detail-label">Water Level</span>
+                                <span class="detail-value">${log.water_level}%</span>
+                            </div>
+                        </div>`;
+                    
+                    item.onclick = () => {
+                        const el = document.getElementById(`lg-${log.id}`);
+                        el.style.display = (el.style.display === "grid") ? "none" : "grid";
+                    };
+                    list.appendChild(item);
+                });
+            }
+
+            function filterLogs() {
+                const dateVal = document.getElementById('logSearchInput').value;
+                const fromVal = document.getElementById('fromTimeInput').value;
+                const toVal = document.getElementById('toTimeInput').value;
+                loadLogs(dateVal, fromVal, toVal);
+            }
+
+            function send(payload) {
+                const msg = new Paho.MQTT.Message(JSON.stringify(payload));
+                msg.destinationName = CONFIG.topics.set;
+                mqtt.send(msg);
+            }
+
+            function deploy() {
+                settingsInSync = true; 
+                send({
+                    "manual_mode": !document.getElementById('modeControl').checked,
+                    "temp_on": parseFloat(document.getElementById('inputTempOn').value),
+                    "temp_space": parseFloat(document.getElementById('inputTempSpace').value),
+                    "hum_on": parseFloat(document.getElementById('inputHumOn').value),
+                    "hum_space": parseFloat(document.getElementById('inputHumSpace').value),
+                    "moi_on": parseFloat(document.getElementById('inputMoiOn').value), 
+                    "moi_space": parseFloat(document.getElementById('inputMoiSpace').value),
+                    "light_on": parseFloat(document.getElementById('inputLightOn').value),
+                    "light_space": parseFloat(document.getElementById('inputLightSpace').value)
+                });
+                alert("Settings deployed!");
+            }
+
+            document.getElementById('modeControl').onchange = (e) => send({ "manual_mode": !e.target.checked });
+            document.getElementById('pumpControl').onchange = (e) => send({ "manual_pump": e.target.checked });
+            document.getElementById('fanControl').onchange = (e) => send({ "manual_fan": e.target.checked });
+            document.getElementById('lightControl').onchange = (e) => send({ "manual_light": e.target.checked });
+        </script>
+    </body>
+    </html>
