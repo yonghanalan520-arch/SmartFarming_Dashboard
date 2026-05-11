@@ -56,7 +56,32 @@
         .setting-card { text-align: left; border-top: 5px solid var(--primary); }
         .input-group { margin-bottom: 15px; }
         .input-group label { font-size: 0.8rem; font-weight: 600; color: #555; display: block; margin-bottom: 5px; }
-        input[type="number"], input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; outline: none; font-weight: 600; box-sizing: border-box; }
+       /* 🌟🌟🌟 重点修复：终极兼容 iOS 的输入框样式 🌟🌟🌟 */
+        input[type="number"], input[type="text"], input[type="date"], input[type="time"] { 
+            width: 100%; 
+            height: 45px !important; 
+            padding: 0 10px !important; 
+            border-radius: 10px; 
+            border: 1px solid #ddd; 
+            outline: none; 
+            font-weight: 600; 
+            box-sizing: border-box; 
+            
+            -webkit-appearance: none !important; 
+            appearance: none !important; 
+            background: #ffffff !important; 
+            background-color: #ffffff !important;
+            color: var(--text) !important; 
+            opacity: 1 !important; 
+        }
+        input[type="date"]::-webkit-datetime-edit, 
+        input[type="time"]::-webkit-datetime-edit {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            height: 100% !important;
+            padding: 0 !important;
+        }
         .btn-deploy { background: var(--primary); color: white; border: none; padding: 15px 40px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.3s; }
 
         /* --- 历史记录搜索栏：适配多框布局 --- */
@@ -100,12 +125,14 @@
             }
             
             /* 🎯 专门精准控制这个 "to" 字 */
+           /* 🌟🌟🌟 重点修复："to" 的比例和对齐 🌟🌟🌟 */
             .search-wrapper span {
                 display: flex;
-                align-items: center;     /* 强行垂直居中 */
-                justify-content: center; /* 强行水平居中 */
-                height: 100%;            /* 高度跟旁边的输入框保持一致 */
-                padding-top: 2px;        /* 🛠️ 用来微调上下位置 */
+                align-items: center;     
+                justify-content: center; 
+                height: 45px;            /* 强制和旁边的框一样高，彻底解决对齐问题 */
+                font-size: 1.1rem;       /* 稍微放大字号，比例更好看 */
+                padding: 0 4px;        
             }
             
             /* 隐藏错位的放大镜图标 */
@@ -121,12 +148,13 @@
             #fromTimeInput { padding-left: 12px; }
             #toTimeInput { padding-left: 12px; }
             
-            /* 第3行：按钮占满整行，增加高度方便手指点击 */
+           /* 确保按钮高度也一致 */
             .search-btn { 
                 grid-column: 1 / -1; 
-                padding: 14px; 
+                padding: 0;          /* 取消上下 padding，用 height 控制 */
                 margin-top: 5px;
                 font-size: 1rem;
+                height: 45px;        /* 加这句！ */
             }
         }
 
